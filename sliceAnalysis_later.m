@@ -102,64 +102,53 @@ for imgNumb = 1:size(CRGB,4)
 end
 toc
 %}
+
+
+
 %% BETTER
 % This script is to analyze 2p slice sessions
 clear all
 
 addpath('F:\code\2pSliceAnalysis\oir2stdData-master');
-pathToFile = 'F:\2P-slice exps\022222\';%'F:\2P-slice exps\022222\105304-3_S1_dL_CA1_20hz_30s_15sdelay.oir';
+addpath('C:\Users\avima\OneDrive\Documents\GitHub\2pSlice');
+pathToFile = 'F:\2P-slice exps\NE DA proj\GRABNE\stim\';%'F:\2P-slice exps\022222\';%'F:\2P-slice exps\022222\105304-3_S1_dL_CA1_20hz_30s_15sdelay.oir';
+cd(pathToFile)
+filePattern = '20hz_30s';
 
-filePattern = '105304-3_S1_dL_CA1_20hz_3s_15sdelay';
-
-resonant = 1;
-if resonant == 1
-    fs = 3; %frame avging of 10hz
-else
-    fs = 1/1.088;
-end
-
-workFiles = dir([pathToFile '\' filePattern '*.oir']);
-
+workFiles = dir([pathToFile '\*' filePattern '*.oir']);
+stimON  = 1;
 preVal  = zeros(length(workFiles),1);  
 postVal = zeros(length(workFiles),1);
 
+
 for fileN = 1:length(workFiles)
-% extract the metadata
-
-fileName = workFiles(fileN).name; 
-strfind(fileName,'s_');
-splitStr = regexp(fileName,'_','split');
-len  = length(splitStr);
-freq = splitStr(contains(splitStr,'hz')); freq= freq{1};
-
-delayStr = splitStr(contains(splitStr,'sdelay')); delayStr = delayStr{1};
-stimTimeStr = splitStr(find(contains(splitStr,'sdelay'))-1); stimTimeStr = stimTimeStr{1};
-stimTime = stimTimeStr(1:findstr(stimTimeStr,'s')-1);
-stimTime = str2double(stimTime);
-
-delay = delayStr(1:findstr(delayStr,'sdelay')-1); %make it in seconds!
-delay = str2double(delay);
+    % extract the metadata and the files
+    fileName = workFiles(fileN).name; 
+    fileNameMat = [fileName(1:end-4) '.mat'];
+    if ~exist(fileNameMat,'file')
+    % extract the metadata and the files
+        if stimON
+            [CRGB, stimTime, delay, freq] = initialize2p(fileName,stimON);
+            save(fileNameMat, 'CRGB', 'stimTime', 'delay','freq')
+        else
+            [CRGB] = initialize2p(fileName,stimON);
+            save(fileNameMat, 'CRGB', '-v7.3')            
+        end
+    end
+    laterDate = compareDates(fileName, '220214'); % '220214' is when i switched to resonant
+    if laterDate
+        fs = 3; %frame avging of 10hz
+        artifactThreshold = 300; 
+    else
+        fs = 1/1.088;
+        artifactThreshold = 500; 
+    end
+    dsFactor = 3/1.088;
 
 % Preprocessing - get rid of artifacts
-
 %find the artifactual images
-    stimLims = [floor(delay*fs+1) ceil((delay+stimTime)*fs)];
-    artifactThreshold = 300; 
+stimLims = [floor(delay*fs+1) ceil((delay+stimTime)*fs)];
 
-tic
-
-%Extract data
-[a,stdData]=oir2stdData(fileName);
-b = (stdData(1).Image{1});
-c = im2uint8(squeeze(b)); %turn into uint8 image
-
-% convert uint8 to RGB to visualize
-CRGB = zeros(size(c,1),size(c,2),3,size(c,3));
-for imgNumb = 1:size(c,3)
-    C = mat2gray(c(:,:,imgNumb));
-    tmp = cat(3, C, C, C);
-    CRGB(:,:,:,imgNumb) = tmp;
-end
 
 if fileN == 1
     % initialize both avg and sem
@@ -167,67 +156,71 @@ if fileN == 1
     semArr = zeros(size(CRGB,4),1);
 end
 
-baselineIMG = 1:stimLims(1) - 1; meanBL = mean(CRGB(:,:,:,baselineIMG),4);
-meanBLb = imgaussfilt(meanBL,2);
+baselineIMG = 1:stimLims(1) - 1; 
+meanBL = mean(CRGB(:,:,:,baselineIMG),4); meanBLb = imgaussfilt(meanBL,2);
 a_gray = rgb2gray(meanBLb); level = 0.1;
-a_bw_o = imbinarize(a_gray,level); 
-%imshow(c(:,:,15)); hold on 
+a_bw = imbinarize(a_gray,level);  %imshow(c(:,:,15)); hold on 
+a_bw_vec = zeros(size(a_bw,1)*size(a_bw,2),1);
+
 
 % a_bw is a thresholded contour of your region. 
 % ADD: sanity check it before calculating avg
-tC = zeros(size(CRGB,1),size(CRGB,2),size(CRGB,4));
-tmpArtBL = zeros(size(CRGB,1),size(CRGB,2));
+tC = zeros(size(CRGB,1),size(CRGB,2),size(CRGB,4)); 
+tmpArtBL = zeros(size(CRGB,1),size(CRGB,2)); tmpImg = tmpArtBL;
 % Create a time array
 %xx = [ceil((totDelaySamp - sampBefore)/fs)- 1/fs : 1/fs : ceil(size(meansArr,1)/fs)] - totDelaySamp;
-xx = [1/fs : 1/fs : ceil(size(CRGB,4)/fs)]' - stimLims(1)/fs;
+xx = (1/fs : 1/fs : ceil(size(CRGB,4)/fs))' - stimLims(1)/fs;
 
 for imgNumb = 1:size(CRGB,4)
-    a_bw = a_bw_o; % reinitialize a_bw
     tmpImg = rgb2gray(CRGB(:,:,:,imgNumb));
     tCtmp = immultiply(tmpImg,a_bw);
     tmpArt = immultiply(tmpImg,~a_bw); % for finding artifacts
     
-    % find background
+    %
+% find background TRY 1
     if imgNumb < stimLims(1)
         tmpArtBL = (tmpArtBL + tmpArt);
     elseif imgNumb == stimLims(1) %when your BL is all added up, find the avg 
         tmpArtBL = tmpArtBL/stimLims(1);
         %f0  = mean(averageArr(1:stimLims(1))); % average of the average/array for the baseline
-        f0  = mean(averageArr(1:stimLims(1))); % average of the average/array for the baseline
+        f0  = mean(averageArr(baselineIMG)); % average of the average/array for the baseline
     end
     
-    % IF RESONANT - have not checked galvano
     if imgNumb >= stimLims(1) && imgNumb <= stimLims(2)
         % find sum of rows in artifactual image - avg image
         tmpArt = imgaussfilt(tmpArt,2);     tmpArtBL = imgaussfilt(tmpArtBL,2); 
         tmpArt = tmpArt - tmpArtBL; %subtract baseline
         tmpArtS = sum(tmpArt,2);
-
+     %{
+    % find background TRY 2
+    if imgNumb < stimLims(1)
+        tmpArtBL = (tmpArtBL + tCtmp);
+    elseif imgNumb == stimLims(1) %when your BL is all added up, find the avg 
+        tmpArtBL = tmpArtBL/stimLims(1);
+        %f0  = mean(averageArr(1:stimLims(1))); % average of the average/array for the baseline
+        f0  = mean(averageArr(baselineIMG)); % average of the average/array for the baseline
+    end
+    
+    if imgNumb >= stimLims(1) && imgNumb <= stimLims(2)
+        % find sum of rows in artifactual image - avg image
+        tmpArt = imgaussfilt(tCtmp,2);     tmpArtBL = imgaussfilt(tmpArtBL,2); 
+        tmpArt = tmpArt - tmpArtBL; %subtract baseline
+        tmpArtS = sum(tmpArt,2);
+%}        
         %find anywhere above threshold
         logAboveThresh = tmpArtS > artifactThreshold*mean(tmpArtBL)'; % 300 percent  baseline?
         i = find(logAboveThresh);
 
-        %[m,i]=maxk(tmpArtS,artifactThreshold); %Artifacts should be ~80 rows
-        %dS = diff(sort(i)); %difference b/w where artifacts are
-        %diffSort = find(dS>50); %has the diff between top rows 
-
-        %dS = diff(diffSort);
-
-        %the amount of artifact rows should be within 3 from 80 rows
-        %ArtIdx = find(dS);
-        %ArtSt = diffSort(ArtIdx) + 1;
-        %ArtEn = ArtSt + dS;
         tCtmp(i,:) = nan; %repmat(mean(tmpArtBL(i,:),2), [1, 512]); %nan 
-        a_bw(i,:) = 0; %adjust area for now
-       % unnecessary?: tC(:,:,imgNumb) = tCtmp;
+        a_bw_vec(i,:) = 0; %adjust pixels for now
     end
     
     tC(:,:,imgNumb) = tCtmp;
     tCtmp(isnan(tCtmp)) = []; tCtmp(tCtmp==0) = [];
-    pixels = sum(a_bw(:));
+    pixels = sum(a_bw_vec(:));
     averageArr(imgNumb,fileN) = sum(tCtmp)/pixels;
     semArr(imgNumb) = std(tCtmp,0,2)./sqrt(size(tCtmp,2)); % ADD: do i want to divide by area?? 
-    
+   
     %check tC before clearing
     %implay(tC)
 end
@@ -237,6 +230,10 @@ dffTmp  = (averageArr(:,fileN) - f0)./f0;
 preVal(fileN)  = dffTmp(stimLims(1)-1);
 postVal(fileN) = dffTmp(stimLims(2)+1);
 
+if size(dffTmp,1) > 300 %CUSTOMIZE
+    dffTmp = decimate(dffTmp,3); dffTmp= dffTmp(3:length(dff)+2);
+    xx = decimate(xx,3) * 1.088; xx = xx(3:length(dff)+2);
+end
 dff(:,fileN) = dffTmp;
 dffSem = std(dffTmp')./sqrt(size(dffTmp,2));%std(dff,0,2)./sqrt(size(dff,2));
 
@@ -244,14 +241,15 @@ figure
 lineProps.col{1} = [0 0.5 0];
 %dff(stimLims) = nan;
 plot(xx,dffTmp);
-underLocs = findstr(fileName,'_');
+underLocs = strfind(fileName,'_');
 tmpFileName = fileName; tmpFileName(underLocs) = ' ';
 title(tmpFileName)
 end
 toc
 
+%% final analysis and save 
 dffAvg = mean(dff,2);
-dffSem = std(dff')./sqrt(size(dff,2));%std(dff,0,2)./sqrt(size(dff,2));
+dffSem = std(dff,2)./sqrt(size(dff,2));%std(dff,0,2)./sqrt(size(dff,2));
 zScore = (dffAvg - mean(dffAvg(1:stimLims(1)-1)))/std(dffAvg);
 %[max_dff, max] = max(dff);
 
@@ -269,6 +267,15 @@ title('averaged z-score trace')
 %mseb(xx',dffAvg',dffSem,lineProps,1);
 
 save(filePattern, dffAvg,dffSem, xx, preVal, postVal)
+
+%% adjust for artifacts?
+
+ if imgNumb < stimLims(1) || imgNumb > stimLims(2)
+        if imgNumb>1
+            slope = (averageArr(imgNumb,fileN) - averageArr(imgNumb-1,fileN))/(1/fs)
+            
+        end
+    end
 
 %% Look at the images in Matlab
 implay(tC)
