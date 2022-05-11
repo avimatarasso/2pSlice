@@ -1,4 +1,4 @@
-function [CRGB, stimTime, delay, freq] = initialize2p(fileName,stimON)
+function [CRGB, stdData, stimTime, delay, freq] = initialize2p(fileName,stimON)
 strfind(fileName,'s_');
 splitStr = regexp(fileName,'_','split');
 len  = length(splitStr);
