@@ -1,22 +1,19 @@
 %% Save ROIs and our images from each session.
 
-addpath('/Users/catazamorano/Desktop/code/2pSlice-main');
+addpath('F:\code\2pSliceAnalysis\oir2stdData-master');
 %addpath('C:\Users\avima\OneDrive\Documents\GitHub\2pSlice');
-addpath('/Volumes/Cat Seagate/mlight/2 photon');
-pathToFile = '/Volumes/Cat Seagate/mlight/2 photon/151649-6';
+addpath('F:\code\2pSliceAnalysis\');
+pathToFile = 'F:\2P-slice exps\NE DA proj\GRABNE\washes\test';%'F:\2P-slice exps\NE DA proj\dlight\washes';%'F:\2P-slice exps\022222\';%'F:\2P-slice exps\022222\105304-3_S1_dL_CA1_20hz_30s_15sdelay.oir';
 cd(pathToFile)
-filePattern = 'DAMGO';
+filePattern = '100uM'; %'CA1';
 workFiles = dir([pathToFile '\*' filePattern '*.oir']);
 stimON = 0;
-
-% If you want to skip already made slices make skip == 1
-skip = 1;
-
+skip = 0;
 switchBtn = 1; multiple = 0; 
 justSave = 0; %if you dont want to compare
-ROIdir = 'ROIdir';
+ROIdir = 'saved ROIs';
 if ~exist(ROIdir,'dir')
-    mkdir ROIdir
+    mkdir(ROIdir)
 end
 
 oirFiles = dir('*.oir');
@@ -30,7 +27,7 @@ for fileN=1:length(oirFiles)
     roiFilename = [currentOir(1:end-4) '_roi.mat'];
     
     % uncomment below to skip already made rois
-    if exist([pwd '/ROIdir/' roiFilename ],'file') && skip
+    if exist([pwd '/saved ROIs/' roiFilename ],'file') && skip
         continue
     end
     
@@ -42,12 +39,12 @@ for fileN=1:length(oirFiles)
     a = squeeze(stdData(1).Image{1});
     if stimON
         [sessionImgs, stdData, stimTime, delay, freq] = initialize2p(currentOir,stimON);        
-        cd('ROIdir') 
+        cd('saved ROIs') 
         save(roiFilename,'sessionImgs', 'stdData','stimTime', 'delay', 'freq','-v7.3')
         cd('..')
     else
-         [sessionImgs, stdData,~,~,~] = initialize2p(currentOir,stimON);
-         cd('ROIdir')
+         [sessionImgs, stdData] = initialize2p(currentOir,stimON);
+         cd('saved ROIs')
          save(roiFilename,'sessionImgs', 'stdData','-v7.3')
         cd('..')
     end
@@ -56,13 +53,13 @@ for fileN=1:length(oirFiles)
     disp(['With file: ' currentOir])
 
 
-    roiFilenameGen = dir(['ROIdir\' currentSlice '*.mat']);
-    load([pwd '/ROIdir/' roiFilename])
+    roiFilenameGen = dir(['saved ROIs\' currentSlice '*.mat']);
+    load([pwd '/saved ROIs/' roiFilename])
     if ~exist('ROImask','var')
-        % if there is no roi files with this slice in 'ROIdir', create a
+        % if there is no roi files with this slice in 'saved ROIs', create a
         % mask, if the roi file exists (else) then check the roi file matches
         meanIMG = mean(sessionImgs(:,:,[1 end]),3);
-        cd('ROIdir')
+        cd('saved ROIs')
         ROImask = createROImask(meanIMG); 
         ROImask = compareROI(meanIMG,ROImask,currentOir,justSave);        
         save(roiFilename, 'ROImask','meanIMG','-v7.3','-append')
@@ -70,7 +67,7 @@ for fileN=1:length(oirFiles)
         % ask does the ROI match the image?
         % if ROI does not match, then create a new mask, and if it does
         % match, then use the same mask and save a new roi file for that slice!
-        cd('ROIdir')
+        cd('saved ROIs')
         if multiple
             tmpFilename = [currentOir(1:end-4) '_000' num2str(ptr) '_roi.mat'];
         else
