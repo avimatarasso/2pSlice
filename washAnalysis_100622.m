@@ -6,10 +6,11 @@ clear all
 
 addpath('C:\Users\bruchasadmin\Documents');
 addpath(genpath('G:\code\'))
-pathToFile = 'G:\2P-slice exps\Sensor Control Exps\GRABDA\216740-1\stim\saved ROIs';
+pathToFile = 'G:\2P-slice exps\Sensor Control Exps\GRABDA\216740-1\washes';
 cd(pathToFile)
 
 stimON    = 0; %this script is Wash only
+avgON     = 1; rollingAvgLen = 3;
 
 %only need to change if you want to put manual title names.
 manualTitles = 0;
@@ -17,6 +18,7 @@ TitleNames = {};%{'100uM 15s_2','100uM 15s 0001','100uM 15s 0002'} ;%{'Start','E
 
 %do you want to reanalyze anything you already analyzed? 1 for yes
 reanalyzeQ = 1;
+
 
 close all 
 % Can loop through fileOI 
@@ -28,10 +30,10 @@ close all
 %         csv? (handDelay)
 %       -
 
-ligand = ''; %beta
+ligand = 'DA'; %beta
 %doses = {'3nM', '10nM', '30nM', '100nM', '300nM', '1uM', '3uM', '10uM', '30uM', '100uM'};
-%doses = {'30nM', '100nM', '300nM', '1uM', '3uM', '10uM', '30uM', '100uM'};
-doses = {'20hz', '5hz'};
+doses = {'100nM', '300nM', '1uM', '3uM', '10uM', '30uM', '100uM'};
+%doses = {'20hz', '5hz'};
 %doses = %{'100uM'};
 extra_info = '';%'420s'; % can make it blank like: {''};
 
@@ -58,7 +60,7 @@ for dd = 1:length(doses)
 for fileN = 1:length(workFiles)
      clearvars -except dd fileN semarr concNames peakVal blVal workFiles ...
          filePattern doses ligand pathToFile manualTitles averageFluor downsampleQ reanalyzeQ cdff ...
-         xx doseOI totDelaySamp sessionImgs fs extra_info TitleNames
+         xx doseOI totDelaySamp sessionImgs fs extra_info TitleNames rollingAvgLen avgON
      
     fileName = workFiles(fileN).name;
 
@@ -112,10 +114,14 @@ for fileN = 1:length(workFiles)
         warning([fileName ' has no sessionImgs saved!!!'])
         continue
     end
+
+    if avgON
+        filteredImgs = imboxfilt3(sessionImgs,[1 1 rollingAvgLen]);
+    end
  
     %find sum of fluorescence per area
     pixels = sum(ROImask(:));
-    contourImgs = (sessionImgs.*ROImask)/pixels; 
+    contourImgs = (filteredImgs.*ROImask)/pixels; 
     % find fluorescence change per area
     tmpAvgFluor = squeeze(sum(contourImgs,1)); tmpAvgFluor = squeeze(sum(tmpAvgFluor,1));
     
@@ -187,6 +193,22 @@ for fileN = 1:length(workFiles)
         concNames{fileN} = dose;
     end
 
+
+     %% Create heat map from before to after stim
+
+    figure
+    imagesc(1000*contourImgs(:,:,maxIdx)-contourImgs(:,:,maxIdx))
+    %L = line([0 0],[0 size(allData2,1)+1]);
+    %set(L,'Color','white')
+    %set(L,'LineWidth',1)
+    %ytick(1:size(LickTrig,1))
+    titleName = strrep(fileName,'_',' '); titleName= titleName(1:end-4);
+    title(titleName)
+    cb = colorbar;
+    set(gca,'yticklabel',{[]})
+    set(gca,'xticklabel',{[]})
+    title(cb,'dF/F')
+    caxis([-1 2]/1000)
 
     %% regular avg
     figure

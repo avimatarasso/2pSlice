@@ -1,15 +1,18 @@
 %% Save ROIs and our images from each session.
 
-addpath('F:\code\2pSliceAnalysis\oir2stdData-master');
+clear all
+
+addpath('G:\code\2pSliceAnalysis\oir2stdData-master');
 %addpath('C:\Users\avima\OneDrive\Documents\GitHub\2pSlice');
-addpath('F:\code\2pSliceAnalysis\');
-pathToFile = 'F:\2P-slice exps\NE DA proj\GRABNE\washes\test';%'F:\2P-slice exps\NE DA proj\dlight\washes';%'F:\2P-slice exps\022222\';%'F:\2P-slice exps\022222\105304-3_S1_dL_CA1_20hz_30s_15sdelay.oir';
+addpath('G:\code\2pSliceAnalysis\');
+pathToFile = 'G:\2P-slice exps\Sensor Control Exps\GRABDA\216740-1\stim';%'F:\2P-slice exps\NE DA proj\dlight\washes';%'F:\2P-slice exps\022222\';%'F:\2P-slice exps\022222\105304-3_S1_dL_CA1_20hz_30s_15sdelay.oir';
+pathToFile = 'G:\2P-slice exps\Sensor Control Exps\GRABDA\216740-1';
 cd(pathToFile)
-filePattern = '100uM'; %'CA1';
+filePattern = ['216740'];
 workFiles = dir([pathToFile '\*' filePattern '*.oir']);
 stimON = 0;
 skip = 0;
-switchBtn = 1; multiple = 0; 
+multiple = 1; 
 justSave = 0; %if you dont want to compare
 ROIdir = 'saved ROIs';
 if ~exist(ROIdir,'dir')
@@ -20,8 +23,7 @@ oirFiles = dir('*.oir');
 % Goal: create a mask for each slice, then check how the mask looks within
 % one session and confirm it looks good, and save that mask under each 
 
-%while switchBtn == 1
-    
+ptr = 1;
 for fileN=1:length(oirFiles)
     currentOir = oirFiles(fileN).name; oirSlice = strsplit(currentOir,'_');
     roiFilename = [currentOir(1:end-4) '_roi.mat'];
@@ -35,10 +37,13 @@ for fileN=1:length(oirFiles)
     delimIdx = strfind(currentOir,'_'); slcStrEnd = delimIdx(2)-1; 
     currentSlice = currentOir(1:slcStrEnd);
         
-    [~,stdData]=oir2stdData(currentOir);
-    a = squeeze(stdData(1).Image{1});
+    %[~,stdData]=oir2stdData(currentOir);
+    %a = squeeze(stdData(1).Image{1});
     if stimON
-        [sessionImgs, stdData, stimTime, delay, freq] = initialize2p(currentOir,stimON);        
+        [sessionImgs, stdData, stimTime, delay, freq] = initialize2p(currentOir,stimON); 
+        stimTime = details.stimTime;
+        delay = details.delay;
+        freq = details.freq;
         cd('saved ROIs') 
         save(roiFilename,'sessionImgs', 'stdData','stimTime', 'delay', 'freq','-v7.3')
         cd('..')
@@ -69,7 +74,7 @@ for fileN=1:length(oirFiles)
         % match, then use the same mask and save a new roi file for that slice!
         cd('saved ROIs')
         if multiple
-            tmpFilename = [currentOir(1:end-4) '_000' num2str(ptr) '_roi.mat'];
+            tmpFilename = [currentOir(1:end-4) '_roi.mat']; %'_000' num2str(ptr) ?
         else
             tmpFilename = [currentOir(1:end-4) '_roi.mat'];
         end
@@ -77,14 +82,14 @@ for fileN=1:length(oirFiles)
         %overwrite meanIMG of the original roiFileName for currentOir
         meanIMG = mean(sessionImgs(:,:,[1 end]),3);
         ROImask = compareROI(meanIMG,ROImask,currentOir,justSave);       
-        if multiple && fileN == 1
-            ROImaskFull = ROImask;
-        elseif multiple && fileN ~=1
-            ROImaskFull = ROImaskFull + ROImask;
-        end
+        %if multiple && fileN == 1
+        %    ROImaskFull = ROImask;
+        %elseif multiple && fileN ~=1
+        %    ROImaskFull = ROImaskFull + ROImask;
+        %end
         save(tmpFilename,'ROImask','meanIMG','-v7.3','-append')
     end
-    cd ..    
+    cd('..')    
 end
 %{
 quest    = 'Do you want another ROI?';
